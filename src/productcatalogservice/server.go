@@ -46,7 +46,8 @@ var (
 	log          *logrus.Logger
 	extraLatency time.Duration
 
-	port = "3550"
+	port     = "3550"
+	restPort = "3551"
 
 	reloadCatalog bool
 )
@@ -115,8 +116,18 @@ func main() {
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	}
+	if os.Getenv("REST_PORT") != "" {
+		restPort = os.Getenv("REST_PORT")
+	}
 	log.Infof("starting grpc server at :%s", port)
 	run(port)
+
+	// Start REST gateway
+	ctx := context.Background()
+	if err := runGateway(ctx, port, restPort); err != nil {
+		log.Fatalf("failed to start REST gateway: %v", err)
+	}
+
 	select {}
 }
 

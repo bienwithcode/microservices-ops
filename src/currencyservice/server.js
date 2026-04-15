@@ -112,6 +112,13 @@ function _getCurrencyData (callback) {
 }
 
 /**
+ * Returns currency data directly (for REST handlers)
+ */
+function _getCurrencyDataSync () {
+  return require('./data/currency_conversion.json');
+}
+
+/**
  * Helper function that handles decimal/fractional carrying
  */
 function _carry (amount) {
@@ -121,6 +128,13 @@ function _carry (amount) {
   amount.nanos = amount.nanos % fractionSize;
   return amount;
 }
+
+// Export helpers for reuse by the REST server
+module.exports = {
+  _getCurrencyData,
+  _getCurrencyDataSync,
+  _carry
+};
 
 /**
  * Lists the supported currencies
@@ -193,6 +207,9 @@ function main () {
       server.start();
     },
    );
+
+  // Start REST server
+  require('./rest-server');
 }
 
 main();

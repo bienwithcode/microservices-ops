@@ -45,9 +45,12 @@ spec:
         image: shippingservice
         ports:
         - containerPort: 50051
+        - containerPort: 50052
         env:
         - name: PORT
           value: "50051"
+        - name: REST_PORT
+          value: "50052"
         - name: DISABLE_PROFILER
           value: "1"
         readinessProbe:
@@ -79,6 +82,9 @@ spec:
   - name: grpc
     port: 50051
     targetPort: 50051
+  - name: rest
+    port: 50052
+    targetPort: 50052
 ---
 apiVersion: v1
 kind: ServiceAccount

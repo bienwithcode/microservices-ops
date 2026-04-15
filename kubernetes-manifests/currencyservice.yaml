@@ -47,9 +47,13 @@ spec:
         ports:
         - name: grpc
           containerPort: 7000
+        - name: rest
+          containerPort: 7001
         env:
         - name: PORT
           value: "7000"
+        - name: REST_PORT
+          value: "7001"
         - name: DISABLE_PROFILER
           value: "1"
         readinessProbe:
@@ -80,6 +84,9 @@ spec:
   - name: grpc
     port: 7000
     targetPort: 7000
+  - name: rest
+    port: 7001
+    targetPort: 7001
 ---
 apiVersion: v1
 kind: ServiceAccount

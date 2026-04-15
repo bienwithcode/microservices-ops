@@ -46,9 +46,12 @@ spec:
         image: productcatalogservice
         ports:
         - containerPort: 3550
+        - containerPort: 3551
         env:
         - name: PORT
           value: "3550"
+        - name: REST_PORT
+          value: "3551"
         - name: DISABLE_PROFILER
           value: "1"
         readinessProbe:
@@ -79,6 +82,9 @@ spec:
   - name: grpc
     port: 3550
     targetPort: 3550
+  - name: rest
+    port: 3551
+    targetPort: 3551
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -46,9 +46,12 @@ spec:
         image: adservice
         ports:
         - containerPort: 9555
+        - containerPort: 9556
         env:
         - name: PORT
           value: "9555"
+        - name: REST_PORT
+          value: "9556"
         resources:
           requests:
             cpu: 200m
@@ -81,6 +84,9 @@ spec:
   - name: grpc
     port: 9555
     targetPort: 9555
+  - name: rest
+    port: 9556
+    targetPort: 9556
 ---
 apiVersion: v1
 kind: ServiceAccount

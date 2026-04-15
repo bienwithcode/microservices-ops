@@ -57,6 +57,10 @@ namespace cartservice
 
 
             services.AddGrpc();
+            services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+            {
+                options.SerializerOptions.TypeInfoResolver = CartJsonContext.Default;
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -73,6 +77,10 @@ namespace cartservice
             {
                 endpoints.MapGrpcService<CartService>();
                 endpoints.MapGrpcService<cartservice.services.HealthCheckService>();
+
+                // REST endpoints - resolve ICartStore from DI
+                var cartStore = app.ApplicationServices.GetRequiredService<ICartStore>();
+                RestCartService.MapRestEndpoints(endpoints, cartStore);
 
                 endpoints.MapGet("/", async context =>
                 {

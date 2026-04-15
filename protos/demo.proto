@@ -18,12 +18,27 @@ package hipstershop;
 
 option go_package = "github.com/GoogleCloudPlatform/microservices-demo/hipstershop";
 
+import "google/api/annotations.proto";
+
 // -----------------Cart service-----------------
 
 service CartService {
-    rpc AddItem(AddItemRequest) returns (Empty) {}
-    rpc GetCart(GetCartRequest) returns (Cart) {}
-    rpc EmptyCart(EmptyCartRequest) returns (Empty) {}
+    rpc AddItem(AddItemRequest) returns (Empty) {
+        option (google.api.http) = {
+            post: "/api/cart/{user_id}/items"
+            body: "item"
+        };
+    }
+    rpc GetCart(GetCartRequest) returns (Cart) {
+        option (google.api.http) = {
+            get: "/api/cart/{user_id}"
+        };
+    }
+    rpc EmptyCart(EmptyCartRequest) returns (Empty) {
+        option (google.api.http) = {
+            delete: "/api/cart/{user_id}"
+        };
+    }
 }
 
 message CartItem {
@@ -54,7 +69,11 @@ message Empty {}
 // ---------------Recommendation service----------
 
 service RecommendationService {
-  rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse){}
+  rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse){
+    option (google.api.http) = {
+      get: "/api/recommendations"
+    };
+  }
 }
 
 message ListRecommendationsRequest {
@@ -69,9 +88,21 @@ message ListRecommendationsResponse {
 // ---------------Product Catalog----------------
 
 service ProductCatalogService {
-    rpc ListProducts(Empty) returns (ListProductsResponse) {}
-    rpc GetProduct(GetProductRequest) returns (Product) {}
-    rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse) {}
+    rpc ListProducts(Empty) returns (ListProductsResponse) {
+        option (google.api.http) = {
+            get: "/api/products"
+        };
+    }
+    rpc GetProduct(GetProductRequest) returns (Product) {
+        option (google.api.http) = {
+            get: "/api/products/{id}"
+        };
+    }
+    rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse) {
+        option (google.api.http) = {
+            get: "/api/products/search"
+        };
+    }
 }
 
 message Product {
@@ -105,8 +136,18 @@ message SearchProductsResponse {
 // ---------------Shipping Service----------
 
 service ShippingService {
-    rpc GetQuote(GetQuoteRequest) returns (GetQuoteResponse) {}
-    rpc ShipOrder(ShipOrderRequest) returns (ShipOrderResponse) {}
+    rpc GetQuote(GetQuoteRequest) returns (GetQuoteResponse) {
+        option (google.api.http) = {
+            post: "/api/shipping/quote"
+            body: "*"
+        };
+    }
+    rpc ShipOrder(ShipOrderRequest) returns (ShipOrderResponse) {
+        option (google.api.http) = {
+            post: "/api/shipping/ship"
+            body: "*"
+        };
+    }
 }
 
 message GetQuoteRequest {
@@ -138,8 +179,17 @@ message Address {
 // -----------------Currency service-----------------
 
 service CurrencyService {
-    rpc GetSupportedCurrencies(Empty) returns (GetSupportedCurrenciesResponse) {}
-    rpc Convert(CurrencyConversionRequest) returns (Money) {}
+    rpc GetSupportedCurrencies(Empty) returns (GetSupportedCurrenciesResponse) {
+        option (google.api.http) = {
+            get: "/api/currencies"
+        };
+    }
+    rpc Convert(CurrencyConversionRequest) returns (Money) {
+        option (google.api.http) = {
+            post: "/api/currencies/convert"
+            body: "*"
+        };
+    }
 }
 
 // Represents an amount of money with its currency type.
@@ -222,7 +272,12 @@ message SendOrderConfirmationRequest {
 // -------------Checkout service-----------------
 
 service CheckoutService {
-    rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse) {}
+    rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse) {
+        option (google.api.http) = {
+            post: "/api/checkout"
+            body: "*"
+        };
+    }
 }
 
 message PlaceOrderRequest {
@@ -241,7 +296,11 @@ message PlaceOrderResponse {
 // ------------Ad service------------------
 
 service AdService {
-    rpc GetAds(AdRequest) returns (AdResponse) {}
+    rpc GetAds(AdRequest) returns (AdResponse) {
+        option (google.api.http) = {
+            get: "/api/ads"
+        };
+    }
 }
 
 message AdRequest {

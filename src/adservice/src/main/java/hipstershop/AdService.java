@@ -16,9 +16,11 @@
 
 package hipstershop;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.sun.net.httpserver.HttpServer;
 import hipstershop.Demo.Ad;
 import hipstershop.Demo.AdRequest;
 import hipstershop.Demo.AdResponse;
@@ -29,9 +31,14 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.services.*;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.Level;
@@ -47,6 +54,8 @@ public final class AdService {
 
   private Server server;
   private HealthStatusManager healthMgr;
+  private HttpServer restServer;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private static final AdService service = new AdService();
 
@@ -67,17 +76,93 @@ public final class AdService {
                 () -> {
                   // Use stderr here since the logger may have been reset by its JVM shutdown hook.
                   System.err.println(
-                      "*** shutting down gRPC ads server since JVM is shutting down");
+                      "*** shutting down gRPC/REST ads servers since JVM is shutting down");
                   AdService.this.stop();
                   System.err.println("*** server shut down");
                 }));
     healthMgr.setStatus("", ServingStatus.SERVING);
   }
 
+  private void startRestServer() throws IOException {
+    int restPort = Integer.parseInt(System.getenv().getOrDefault("REST_PORT", "9556"));
+    restServer = HttpServer.create(new InetSocketAddress(restPort), 0);
+    restServer.createContext(
+        "/api/ads",
+        exchange -> {
+          try {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+              exchange.sendResponseHeaders(405, -1);
+              return;
+            }
+
+            List<Ad> allAds = new ArrayList<>();
+            URI uri = exchange.getRequestURI();
+            String query = uri.getQuery();
+            if (query != null) {
+              String contextKeysParam = null;
+              for (String param : query.split("&")) {
+                String[] kv = param.split("=", 2);
+                if ("contextKeys".equals(kv[0]) && kv.length == 2) {
+                  contextKeysParam = java.net.URLDecoder.decode(kv[1], "UTF-8");
+                  break;
+                }
+              }
+              if (contextKeysParam != null && !contextKeysParam.isEmpty()) {
+                logger.info("REST received ad request (context_keys=" + contextKeysParam + ")");
+                for (String key : contextKeysParam.split(",")) {
+                  String trimmed = key.trim();
+                  if (!trimmed.isEmpty()) {
+                    Collection<Ad> ads = AdService.this.getAdsByCategory(trimmed);
+                    allAds.addAll(ads);
+                  }
+                }
+              }
+            }
+
+            if (allAds.isEmpty()) {
+              allAds = getRandomAds();
+            }
+
+            List<Map<String, String>> adsList = new ArrayList<>();
+            for (Ad ad : allAds) {
+              Map<String, String> adMap = new HashMap<>();
+              adMap.put("redirectUrl", ad.getRedirectUrl());
+              adMap.put("text", ad.getText());
+              adsList.add(adMap);
+            }
+            Map<String, Object> responseMap = new HashMap<>();
+            responseMap.put("ads", adsList);
+
+            String json = objectMapper.writeValueAsString(responseMap);
+            byte[] bytes = json.getBytes("UTF-8");
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+              os.write(bytes);
+            }
+          } catch (Exception e) {
+            logger.log(Level.ERROR, "Error handling REST request", e);
+            String error = "{\"error\": \"Internal server error\"}";
+            byte[] errorBytes = error.getBytes("UTF-8");
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(500, errorBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+              os.write(errorBytes);
+            }
+          }
+        });
+    restServer.setExecutor(null);
+    restServer.start();
+    logger.info("Ad REST Service started, listening on " + restPort);
+  }
+
   private void stop() {
     if (server != null) {
       healthMgr.clearStatus("");
       server.shutdown();
+    }
+    if (restServer != null) {
+      restServer.stop(0);
     }
   }
 
@@ -233,6 +318,7 @@ public final class AdService {
     logger.info("AdService starting.");
     final AdService service = AdService.getInstance();
     service.start();
+    service.startRestServer();
     service.blockUntilShutdown();
   }
 }

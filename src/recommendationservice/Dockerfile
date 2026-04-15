@@ -50,6 +50,7 @@ COPY . .
 
 # set listen port
 ENV PORT="8080"
-EXPOSE 8080
+ENV REST_PORT="8081"
+EXPOSE 8080 8081
 
 ENTRYPOINT ["python", "recommendation_server.py"]

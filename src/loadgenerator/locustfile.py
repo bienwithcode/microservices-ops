@@ -15,9 +15,11 @@
 # limitations under the License.
 
 import random
+import uuid
 from locust import FastHttpUser, TaskSet, between
 from faker import Faker
 import datetime
+
 fake = Faker()
 
 products = [
@@ -36,56 +38,84 @@ def index(l):
 
 def setCurrency(l):
     currencies = ['EUR', 'USD', 'JPY', 'CAD', 'GBP', 'TRY']
-    l.client.post("/setCurrency",
-        {'currency_code': random.choice(currencies)})
+    # Frontend updates localStorage, and might call convert API
+    # Here we simulate the convert API call if needed, or just simulate the state change
+    # The actual microservices use the currency_code if passed in some APIs or session
+    # For this rebuild, most APIs are stateless and expect currency in the request or use default.
+    l.client.post("/api/currencies/convert", json={
+        "from": "USD",
+        "to": random.choice(currencies)
+    }, headers=l.headers)
 
 def browseProduct(l):
-    l.client.get("/product/" + random.choice(products))
+    product_id = random.choice(products)
+    l.client.get("/api/products/" + product_id, headers=l.headers)
+    l.client.get("/api/recommendations", params={"productIds": [product_id], "userId": l.session_id}, headers=l.headers)
+    l.client.get("/api/ads", params={"contextKeys": ["food"]}, headers=l.headers)
 
 def viewCart(l):
-    l.client.get("/cart")
+    l.client.get("/api/cart/" + l.session_id, headers=l.headers)
 
 def addToCart(l):
-    product = random.choice(products)
-    l.client.get("/product/" + product)
-    l.client.post("/cart", {
-        'product_id': product,
-        'quantity': random.randint(1,10)})
-    
+    product_id = random.choice(products)
+    l.client.post(f"/api/cart/{l.session_id}/items", json={
+        "productId": product_id,
+        "quantity": random.randint(1, 10)
+    }, headers=l.headers)
+
 def empty_cart(l):
-    l.client.post('/cart/empty')
+    l.client.delete(f"/api/cart/{l.session_id}", headers=l.headers)
 
 def checkout(l):
-    addToCart(l)
-    current_year = datetime.datetime.now().year+1
-    l.client.post("/cart/checkout", {
-        'email': fake.email(),
-        'street_address': fake.street_address(),
-        'zip_code': fake.zipcode(),
-        'city': fake.city(),
-        'state': fake.state_abbr(),
-        'country': fake.country(),
-        'credit_card_number': fake.credit_card_number(card_type="visa"),
-        'credit_card_expiration_month': random.randint(1, 12),
-        'credit_card_expiration_year': random.randint(current_year, current_year + 70),
-        'credit_card_cvv': f"{random.randint(100, 999)}",
-    })
+    # Place an item in cart first to ensure checkout has something to do
+    product_id = random.choice(products)
+    l.client.post(f"/api/cart/{l.session_id}/items", json={
+        "productId": product_id,
+        "quantity": 1
+    }, headers=l.headers)
     
-def logout(l):
-    l.client.get('/logout')  
-
+    current_year = datetime.datetime.now().year + 1
+    
+    l.client.post("/api/checkout", json={
+        "userId": l.session_id,
+        "email": fake.email(),
+        "address": {
+            "streetAddress": fake.street_address(),
+            "zipCode": fake.zipcode()[:5],
+            "city": fake.city(),
+            "state": fake.state_abbr(),
+            "country": fake.country(),
+        },
+        "payment": {
+            "creditCard": {
+                "creditCardNumber": fake.credit_card_number(card_type="visa"),
+                "creditCardExpirationMonth": random.randint(1, 12),
+                "creditCardExpirationYear": random.randint(current_year, current_year + 10),
+                "creditCardCvv": f"{random.randint(100, 999)}",
+            }
+        },
+        "cart": [
+            {
+                "productId": product_id,
+                "quantity": 1
+            }
+        ]
+    }, headers=l.headers)
 
 class UserBehavior(TaskSet):
-
     def on_start(self):
+        self.user.session_id = str(uuid.uuid4())
+        self.user.headers = {"X-Session-Id": self.user.session_id}
         index(self)
 
-    tasks = {index: 1,
+    tasks = {
+        index: 1,
         setCurrency: 2,
         browseProduct: 10,
         addToCart: 2,
         viewCart: 3,
-        checkout: 1}
+        checkout: 1
+    }
 
 class WebsiteUser(FastHttpUser):
     tasks = [UserBehavior]

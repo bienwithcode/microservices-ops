@@ -44,6 +44,7 @@ import (
 
 const (
 	listenPort  = "5050"
+	restPort    = "5051"
 	usdCurrency = "USD"
 )
 
@@ -106,6 +107,10 @@ func main() {
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	}
+	gwPort := restPort
+	if os.Getenv("REST_PORT") != "" {
+		gwPort = os.Getenv("REST_PORT")
+	}
 
 	svc := new(checkoutService)
 	mustMapEnv(&svc.shippingSvcAddr, "SHIPPING_SERVICE_ADDR")
@@ -143,8 +148,14 @@ func main() {
 	healthcheck := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthcheck)
 	log.Infof("starting to listen on tcp: %q", lis.Addr().String())
-	err = srv.Serve(lis)
-	log.Fatal(err)
+	go srv.Serve(lis)
+
+	// Start REST gateway
+	if err := runGateway(ctx, port, gwPort); err != nil {
+		log.Fatalf("failed to start REST gateway: %v", err)
+	}
+
+	select {}
 }
 
 func initStats() {
@@ -237,7 +248,7 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 
 	prep, err := cs.prepareOrderItemsAndShippingQuoteFromCart(ctx, req.UserId, req.UserCurrency, req.Address)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "%s", err.Error())
 	}
 
 	total := pb.Money{CurrencyCode: req.UserCurrency,
@@ -311,6 +322,9 @@ func (cs *checkoutService) prepareOrderItemsAndShippingQuoteFromCart(ctx context
 }
 
 func (cs *checkoutService) quoteShipping(ctx context.Context, address *pb.Address, items []*pb.CartItem) (*pb.Money, error) {
+	if cs.shippingSvcConn == nil {
+		return nil, status.Errorf(codes.Internal, "shipping service connection not initialized")
+	}
 	shippingQuote, err := pb.NewShippingServiceClient(cs.shippingSvcConn).
 		GetQuote(ctx, &pb.GetQuoteRequest{
 			Address: address,
@@ -322,6 +336,9 @@ func (cs *checkoutService) quoteShipping(ctx context.Context, address *pb.Addres
 }
 
 func (cs *checkoutService) getUserCart(ctx context.Context, userID string) ([]*pb.CartItem, error) {
+	if cs.cartSvcConn == nil {
+		return nil, status.Errorf(codes.Internal, "cart service connection not initialized")
+	}
 	cart, err := pb.NewCartServiceClient(cs.cartSvcConn).GetCart(ctx, &pb.GetCartRequest{UserId: userID})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user cart during checkout: %+v", err)
@@ -330,6 +347,9 @@ func (cs *checkoutService) getUserCart(ctx context.Context, userID string) ([]*p
 }
 
 func (cs *checkoutService) emptyUserCart(ctx context.Context, userID string) error {
+	if cs.cartSvcConn == nil {
+		return status.Errorf(codes.Internal, "cart service connection not initialized")
+	}
 	if _, err := pb.NewCartServiceClient(cs.cartSvcConn).EmptyCart(ctx, &pb.EmptyCartRequest{UserId: userID}); err != nil {
 		return fmt.Errorf("failed to empty user cart during checkout: %+v", err)
 	}
@@ -337,6 +357,9 @@ func (cs *checkoutService) emptyUserCart(ctx context.Context, userID string) err
 }
 
 func (cs *checkoutService) prepOrderItems(ctx context.Context, items []*pb.CartItem, userCurrency string) ([]*pb.OrderItem, error) {
+	if cs.productCatalogSvcConn == nil {
+		return nil, status.Errorf(codes.Internal, "product catalog service connection not initialized")
+	}
 	out := make([]*pb.OrderItem, len(items))
 	cl := pb.NewProductCatalogServiceClient(cs.productCatalogSvcConn)
 
@@ -357,6 +380,9 @@ func (cs *checkoutService) prepOrderItems(ctx context.Context, items []*pb.CartI
 }
 
 func (cs *checkoutService) convertCurrency(ctx context.Context, from *pb.Money, toCurrency string) (*pb.Money, error) {
+	if cs.currencySvcConn == nil {
+		return nil, status.Errorf(codes.Internal, "currency service connection not initialized")
+	}
 	result, err := pb.NewCurrencyServiceClient(cs.currencySvcConn).Convert(context.TODO(), &pb.CurrencyConversionRequest{
 		From:   from,
 		ToCode: toCurrency})
@@ -367,6 +393,9 @@ func (cs *checkoutService) convertCurrency(ctx context.Context, from *pb.Money, 
 }
 
 func (cs *checkoutService) chargeCard(ctx context.Context, amount *pb.Money, paymentInfo *pb.CreditCardInfo) (string, error) {
+	if cs.paymentSvcConn == nil {
+		return "", status.Errorf(codes.Internal, "payment service connection not initialized")
+	}
 	paymentResp, err := pb.NewPaymentServiceClient(cs.paymentSvcConn).Charge(ctx, &pb.ChargeRequest{
 		Amount:     amount,
 		CreditCard: paymentInfo})
@@ -377,6 +406,9 @@ func (cs *checkoutService) chargeCard(ctx context.Context, amount *pb.Money, pay
 }
 
 func (cs *checkoutService) sendOrderConfirmation(ctx context.Context, email string, order *pb.OrderResult) error {
+	if cs.emailSvcConn == nil {
+		return status.Errorf(codes.Internal, "email service connection not initialized")
+	}
 	_, err := pb.NewEmailServiceClient(cs.emailSvcConn).SendOrderConfirmation(ctx, &pb.SendOrderConfirmationRequest{
 		Email: email,
 		Order: order})
@@ -384,6 +416,9 @@ func (cs *checkoutService) sendOrderConfirmation(ctx context.Context, email stri
 }
 
 func (cs *checkoutService) shipOrder(ctx context.Context, address *pb.Address, items []*pb.CartItem) (string, error) {
+	if cs.shippingSvcConn == nil {
+		return "", status.Errorf(codes.Internal, "shipping service connection not initialized")
+	}
 	resp, err := pb.NewShippingServiceClient(cs.shippingSvcConn).ShipOrder(ctx, &pb.ShipOrderRequest{
 		Address: address,
 		Items:   items})

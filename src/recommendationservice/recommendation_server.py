@@ -16,6 +16,7 @@
 
 import os
 import random
+import threading
 import time
 import traceback
 from concurrent import futures
@@ -147,6 +148,17 @@ if __name__ == "__main__":
     logger.info("listening on port: " + port)
     server.add_insecure_port('[::]:'+port)
     server.start()
+
+    # start REST server in a background thread
+    rest_port = os.environ.get('REST_PORT', "8081")
+    logger.info("starting REST server on port: " + rest_port)
+    import rest_server
+    rest_thread = threading.Thread(
+        target=rest_server.start_rest_server,
+        args=(product_catalog_stub, int(rest_port)),
+        daemon=True
+    )
+    rest_thread.start()
 
     # keep alive
     try:

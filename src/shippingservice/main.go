@@ -34,7 +34,8 @@ import (
 )
 
 const (
-	defaultPort = "50051"
+	defaultPort    = "50051"
+	defaultRestPort = "50052"
 )
 
 var log *logrus.Logger
@@ -73,9 +74,13 @@ func main() {
 	if value, ok := os.LookupEnv("PORT"); ok {
 		port = value
 	}
-	port = fmt.Sprintf(":%s", port)
 
-	lis, err := net.Listen("tcp", port)
+	restPort := defaultRestPort
+	if value, ok := os.LookupEnv("REST_PORT"); ok {
+		restPort = value
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -96,9 +101,15 @@ func main() {
 
 	// Register reflection service on gRPC server.
 	reflection.Register(srv)
-	if err := srv.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	go srv.Serve(lis)
+
+	// Start REST gateway
+	ctx := context.Background()
+	if err := runGateway(ctx, port, restPort); err != nil {
+		log.Fatalf("failed to start REST gateway: %v", err)
 	}
+
+	select {}
 }
 
 // server controls RPC service responses.
