@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useSession } from '../context/SessionContext.jsx';
+import { useCart } from '../context/CartContext.jsx';
 import { useCurrency } from '../context/CurrencyContext.jsx';
 import { getCart, emptyCart } from '../api/cart.js';
 import { getProduct } from '../api/products.js';
@@ -19,6 +20,7 @@ const MONTHS = [
 
 export default function Cart() {
   const { sessionId } = useSession();
+  const { refreshCart } = useCart();
   const { currency } = useCurrency();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
@@ -89,8 +91,9 @@ export default function Cart() {
     } catch (err) {
       setError(err.message);
     }
+    await refreshCart();
     setLoading(false);
-  }, [sessionId]);
+  }, [sessionId, refreshCart]);
 
   useEffect(() => {
     fetchCart();
@@ -99,6 +102,7 @@ export default function Cart() {
   async function handleEmptyCart() {
     try {
       await emptyCart(sessionId);
+      await refreshCart();
       setItems([]);
       setShippingCost(null);
     } catch (err) {
@@ -147,6 +151,8 @@ export default function Cart() {
         creditCard,
       });
       const order = orderRes.data.order || orderRes.data;
+      // Refresh cart count since it's now empty
+      await refreshCart();
       // Store order data and navigate
       localStorage.setItem('lastOrder', JSON.stringify(order));
       navigate('/order', { state: { order } });

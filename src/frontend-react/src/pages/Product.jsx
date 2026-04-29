@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext.jsx';
+import { useCart } from '../context/CartContext.jsx';
 import { getProduct } from '../api/products.js';
 import { addItem } from '../api/cart.js';
 import { getRecommendations } from '../api/recommendations.js';
@@ -13,6 +14,7 @@ export default function Product() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { sessionId } = useSession();
+  const { refreshCart } = useCart();
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [recommendations, setRecommendations] = useState([]);
@@ -43,6 +45,7 @@ export default function Product() {
     e.preventDefault();
     try {
       await addItem(sessionId, { productId: id, quantity: Number(quantity) });
+      await refreshCart();
       navigate('/cart');
     } catch (err) {
       setError(err.message);
